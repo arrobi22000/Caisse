@@ -294,8 +294,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-mono);min-hei
         <button onclick="clearData()" style="margin-top:10px;width:100%;padding:10px;border-radius:10px;background:transparent;border:1px solid var(--danger);color:var(--danger);font-family:var(--font-mono);font-size:11px;cursor:pointer">
           Effacer toutes les données
         </button>
-        <button onclick="localStorage.removeItem('od_synced');localStorage.removeItem('od_file_id');showToast('✓ Listo, sincroniza de nuevo')" style="margin-top:6px;width:100%;padding:10px;border-radius:10px;background:transparent;border:1px solid var(--accent2);color:var(--accent2);font-family:var(--font-mono);font-size:11px;cursor:pointer">
+        <button onclick="if(confirm('Esto marcara TODAS las entradas como pendientes para reenviarlas al Excel. Solo hace falta si cambiaste datos directamente en el Excel. Continuar?')){localStorage.removeItem('od_synced');localStorage.removeItem('od_file_id');showToast('Listo, sincroniza de nuevo')}" style="margin-top:6px;width:100%;padding:10px;border-radius:10px;background:transparent;border:1px solid var(--accent2);color:var(--accent2);font-family:var(--font-mono);font-size:11px;cursor:pointer">
           🔄 Forzar resincronización
+        </button>
+        <button onclick="markAllSynced()" style="margin-top:6px;width:100%;padding:10px;border-radius:10px;background:transparent;border:1px solid var(--accent);color:var(--accent);font-family:var(--font-mono);font-size:11px;cursor:pointer">
+          ✓ Marcar todo como sincronizado
         </button>
       </div>
     </div>
@@ -348,6 +351,18 @@ const STORE_SHORT={'BOUTIQUE DE LA PLAGE':'Boutique','COMPTOIR DES OCEANS':'Comp
 let currentStore='BOUTIQUE DE LA PLAGE';
 let entries=JSON.parse(localStorage.getItem('caixa_entries')||'[]');
 let editingId=null;
+function unmarkSynced(id){
+  if(!id) return;
+  const syn=JSON.parse(localStorage.getItem('od_synced')||'[]').filter(x=>x!==id);
+  localStorage.setItem('od_synced',JSON.stringify(syn));
+}
+function markAllSynced(){
+  const ids=JSON.parse(localStorage.getItem('caixa_entries')||'[]').map(e=>e.id);
+  if(!confirm('El Excel ya esta al dia? Se marcaran '+ids.length+' entradas como sincronizadas SIN reescribir. Usalo solo si no has cambiado datos desde la ultima sincronizacion.')) return;
+  localStorage.setItem('od_synced',JSON.stringify(ids));
+  showToast('OK: '+ids.length+' marcadas como sincronizadas');
+  if(typeof updateSyncStatus==='function') updateSyncStatus();
+}
 
 function updateClock(){
   const n=new Date();
@@ -401,6 +416,7 @@ function submitEntry(){
   if(editingId){
     const idx=entries.findIndex(e=>e.id===editingId);
     if(idx>=0)entries[idx]=entry;
+    unmarkSynced(editingId);
     showToast('✓ Modifié');
   }else{
     // Check if entry exists for same day+store — merge versements
@@ -409,6 +425,7 @@ function submitEntry(){
       // Only versement — add to existing entry
       entries[existing].versement_cheq=(entries[existing].versement_cheq||0)+vch;
       entries[existing].versement_esp=(entries[existing].versement_esp||0)+vesp;
+      unmarkSynced(entries[existing].id);
       showToast('✓ Versement añadido al día');
     }else{
       entries.push(entry);
@@ -456,6 +473,7 @@ function saveVersement(){
   if(existing>=0){
     entries[existing].versement_cheq=(entries[existing].versement_cheq||0)+vch;
     entries[existing].versement_esp=(entries[existing].versement_esp||0)+vesp;
+    unmarkSynced(entries[existing].id);
     showToast('✓ Versement añadido');
   }else{
     // Create new entry with only versement
